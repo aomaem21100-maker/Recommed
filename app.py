@@ -1,7 +1,9 @@
 import os
 import re
+from urllib.parse import quote
  
 import pandas as pd
+import requests
 import streamlit as st
 from neo4j import GraphDatabase
  
@@ -28,8 +30,34 @@ def run(query, **params):
  
  
 # ---------- Image helper ----------
+# ชื่อรถ -> ชื่อบทความ Wikipedia (ถ้าไม่ระบุ จะใช้ชื่อรถตรง ๆ)
+WIKI_TITLES = {
+    "Mazda 3": "Mazda3",
+    "Ford Ranger": "Ford Ranger (T6)",
+    "Nissan Almera": "Nissan Almera",
+}
+ 
+ 
+@st.cache_data(ttl=86400, show_spinner=False)
+def wiki_image(name):
+    """ดึงรูปหลักของบทความ Wikipedia (ไม่ต้องใช้ API key) คืน None ถ้าไม่เจอ"""
+    title = WIKI_TITLES.get(name, name).replace(" ", "_")
+    try:
+        r = requests.get(
+            f"https://en.wikipedia.org/api/rest_v1/page/summary/{quote(title)}",
+            headers={"User-Agent": "CarRecommenderStudentProject/1.0"},
+            timeout=6,
+        )
+        if r.ok:
+            data = r.json()
+            return (data.get("thumbnail") or {}).get("source")
+    except requests.RequestException:
+        pass
+    return None
+ 
+ 
 def car_image(name, url=None):
-    """ลำดับ: ไฟล์ images/<ชื่อรถ>.jpg -> ลิงก์ใน Neo4j (car.image) -> placeholder"""
+    """ลำดับ: images/<ชื่อรถ>.jpg -> car.image ใน Neo4j -> Wikipedia -> placeholder"""
     slug = re.sub(r"[^a-z0-9]+", "_", str(name).lower()).strip("_")
     for ext in ("jpg", "jpeg", "png", "webp"):
         path = os.path.join("images", f"{slug}.{ext}")
@@ -37,6 +65,9 @@ def car_image(name, url=None):
             return path
     if isinstance(url, str) and url.strip():
         return url.strip()
+    wiki = wiki_image(str(name))
+    if wiki:
+        return wiki
     return f"https://placehold.co/600x400/1a1a1a/ef4444?text={str(name).replace(' ', '+')}"
  
  
