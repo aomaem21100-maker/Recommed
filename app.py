@@ -1,3 +1,6 @@
+import os
+import re
+ 
 import pandas as pd
 import streamlit as st
 from neo4j import GraphDatabase
@@ -22,6 +25,19 @@ def run(query, **params):
         query, parameters_=params, database_=DATABASE
     )
     return [r.data() for r in records]
+ 
+ 
+# ---------- Image helper ----------
+def car_image(name, url=None):
+    """ลำดับ: ไฟล์ images/<ชื่อรถ>.jpg -> ลิงก์ใน Neo4j (car.image) -> placeholder"""
+    slug = re.sub(r"[^a-z0-9]+", "_", str(name).lower()).strip("_")
+    for ext in ("jpg", "jpeg", "png", "webp"):
+        path = os.path.join("images", f"{slug}.{ext}")
+        if os.path.exists(path):
+            return path
+    if isinstance(url, str) and url.strip():
+        return url.strip()
+    return f"https://placehold.co/600x400/1a1a1a/ef4444?text={str(name).replace(' ', '+')}"
  
  
 # ---------- Data functions ----------
@@ -49,6 +65,7 @@ MATCH (me:Person {{person_id: $pid}})-[:FRIEND_OF*1..{hops}]-(f:Person)-[:OWNS]-
 WHERE f <> me AND NOT (me)-[:OWNS]->(car)
 RETURN car.car_id AS car_id,
        car.name AS car,
+       car.image AS image,
        count(DISTINCT f) AS score,
        collect(DISTINCT f.name) AS owned_by
 ORDER BY score DESC, car
@@ -106,7 +123,6 @@ def build_dot(me_name, friends, owns, my_pid, recommended):
         lines.append(f'"{q(o["person"])}" -- "car:{car}" [label="OWNS", fontsize=9, style=dashed];')
     lines.append("}")
     return "\n".join(lines)
- 
  
  
 def write(query, **params):
@@ -241,12 +257,23 @@ with tab_rec:
     if df.empty:
         st.info("ไม่พบรถที่แนะนำ — เพื่อนอาจไม่มีรถ หรือผู้ใช้มีรถเหล่านั้นแล้ว ลองเพิ่มระยะเครือข่าย")
     else:
-        show = df.assign(owned_by=df["owned_by"].apply(", ".join)).rename(
-            columns={"car_id": "รหัส", "car": "รถ", "score": "คะแนน", "owned_by": "เพื่อนที่ใช้"}
-        )
-        left, right = st.columns([3, 2])
-        left.dataframe(show, hide_index=True, use_container_width=True)
-        right.bar_chart(df.set_index("car")["score"])
+        for start in range(0, len(df), 3):
+            cols = st.columns(3)
+            for col, (_, row) in zip(cols, df.iloc[start:start + 3].iterrows()):
+                with col:
+                    st.image(car_image(row["car"], row.get("image")), use_container_width=True)
+                    st.markdown(f"**{row['car']}**")
+                    st.caption(f"คะแนน {row['score']} · เพื่อนที่ใช้: {', '.join(row['owned_by'])}")
+ 
+        with st.expander("ดูตาราง / กราฟคะแนน"):
+            show = (
+                df.drop(columns=["image"], errors="ignore")
+                .assign(owned_by=df["owned_by"].apply(", ".join))
+                .rename(columns={"car_id": "รหัส", "car": "รถ", "score": "คะแนน", "owned_by": "เพื่อนที่ใช้"})
+            )
+            left, right = st.columns([3, 2])
+            left.dataframe(show, hide_index=True, use_container_width=True)
+            right.bar_chart(df.set_index("car")["score"])
  
 with tab_graph:
     friends, owns = network(pid, hops)
@@ -302,9 +329,10 @@ with tab_manage:
         st.markdown("**เพิ่ม Car**")
         with st.form("add_car", clear_on_submit=True):
             cname = st.text_input("รุ่นรถ")
+            cimg = st.text_input("ลิงก์รูป (ไม่บังคับ)")
             if st.form_submit_button("เพิ่ม") and cname.strip():
-                write("MERGE (c:Car {car_id: $id}) SET c.name = $n, c.model = $n",
-                      id=next_id("C", cars), n=cname.strip())
+                write("MERGE (c:Car {car_id: $id}) SET c.name = $n, c.model = $n, c.image = $img",
+                      id=next_id("C", cars), n=cname.strip(), img=cimg.strip() or None)
                 st.rerun()
  
     h1, h2 = st.columns(2)
@@ -355,3 +383,4 @@ with tab_manage:
 with tab_cypher:
     st.code(recommend_query(hops), language="cypher")
     st.caption(f"พารามิเตอร์: pid = '{pid}', limit = {limit}")
+ 
