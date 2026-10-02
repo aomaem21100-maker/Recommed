@@ -278,8 +278,10 @@ with st.sidebar:
     c2.metric("Relationships", stats["rels"])
 
 st.subheader(f"ผลการแนะนำสำหรับ {names[pid]}")
+
+# ปรับปรุงแท็บโดยใช้ชุดไอคอนมาตรฐาน ป้องกันปัญหา Glyph/Font ไม่รองรับในบางเว็บบราวเซอร์
 tab_rec, tab_graph, tab_stats, tab_manage, tab_cypher = st.tabs(
-    ["🚘 รถที่แนะนำ", "🕸️ กราฟเครือข่าย", "📊 สถิติ", "🛠️ จัดการข้อมูล", "💻 Cypher"]
+    ["🚗 รถที่แนะนำ", "🌐 กราฟเครือข่าย", "📊 สถิติ", "⚙️ จัดการข้อมูล", "💻 Cypher"]
 )
 
 df = recommend(pid, hops, limit)
