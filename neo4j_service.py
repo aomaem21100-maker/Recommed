@@ -52,7 +52,7 @@ def create_schema() -> None:
 
 
 def seed_demo_data() -> None:
-    """Idempotent sample dataset for Car Recommendation System."""
+    """Idempotent sample dataset for Car Recommendation System: safe to run more than once."""
     create_schema()
 
     persons = [
@@ -101,7 +101,7 @@ def seed_demo_data() -> None:
         write=True,
     )
 
-    # ความสัมพันธ์ความเป็นเพื่อน
+    # สร้างความสัมพันธ์เพื่อน
     friendships = [
         ["P001", "P002"], ["P001", "P003"], ["P001", "P009"],
         ["P002", "P005"], ["P003", "P006"], ["P003", "P007"],
@@ -117,7 +117,7 @@ def seed_demo_data() -> None:
         write=True,
     )
 
-    # ความสัมพันธ์การเป็นเจ้าของรถ
+    # สร้างความสัมพันธ์การเป็นเจ้าของรถ
     ownerships = [
         {"pid": "P004", "cid": "C001"},
         {"pid": "P005", "cid": "C001"},
@@ -139,6 +139,10 @@ def get_persons() -> list[dict[str, Any]]:
     return query("MATCH (p:Person) RETURN p.person_id AS person_id, p.name AS name ORDER BY p.person_id")
 
 
+def get_cars() -> list[dict[str, Any]]:
+    return query("MATCH (c:Car) RETURN c.car_id AS car_id, c.name AS name ORDER BY c.name")
+
+
 def get_dashboard_metrics() -> dict[str, int]:
     rows = query(
         """
@@ -152,8 +156,8 @@ def get_dashboard_metrics() -> dict[str, int]:
     return rows[0] if rows else {"nodes": 0, "relationships": 0}
 
 
-def recommend_cars(pid: str, min_hops: int = 1, max_hops: int = 2, limit: int = 5) -> list[dict[str, Any]]:
-    """ดึงข้อมูลคำแนะนำรถตามระยะเครือข่ายเพื่อน (Cypher ตรงตามรูปภาพในหน้า Cypher Tab)"""
+def recommend_cars(pid: str, min_hops: int = 1, max_hops: int = 2) -> list[dict[str, Any]]:
+    """คำนวณการแนะนำรถยนต์จากเครือข่ายเพื่อน (เอา LIMIT ออกแล้ว)"""
     cypher = f"""
     MATCH (me:Person {{person_id: $pid}})-[:FRIEND_OF*{min_hops}..{max_hops}]-(f:Person)-[:OWNS]->(car:Car)
     WHERE f <> me AND NOT (me)-[:OWNS]->(car)
@@ -163,9 +167,8 @@ def recommend_cars(pid: str, min_hops: int = 1, max_hops: int = 2, limit: int = 
            count(DISTINCT f) AS score,
            collect(DISTINCT f.name) AS owned_by
     ORDER BY score DESC, car
-    LIMIT $limit
     """
-    return query(cypher, {"pid": pid, "limit": int(limit)})
+    return query(cypher, {"pid": pid})
 
 
 def get_popular_cars() -> list[dict[str, Any]]:
@@ -229,6 +232,27 @@ def add_car_ownership(person_id: str, car_id: str) -> None:
         {"pid": person_id, "cid": car_id},
         write=True,
     )
+
+
+def delete_relationship(person_id1: str, person_id2_or_car_id: str, rel_type: str = "FRIEND_OF") -> None:
+    if rel_type == "FRIEND_OF":
+        query(
+            """
+            MATCH (a:Person {person_id: $p1})-[r:FRIEND_OF]-(b:Person {person_id: $p2})
+            DELETE r
+            """,
+            {"p1": person_id1, "p2": person_id2_or_car_id},
+            write=True,
+        )
+    elif rel_type == "OWNS":
+        query(
+            """
+            MATCH (p:Person {person_id: $pid})-[r:OWNS]->(c:Car {car_id: $cid})
+            DELETE r
+            """,
+            {"pid": person_id1, "cid": person_id2_or_car_id},
+            write=True,
+        )
 
 
 def graph_neighborhood(pid: str, limit: int = 40) -> list[dict[str, Any]]:
