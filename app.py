@@ -135,23 +135,70 @@ def network(pid: str, hops: int):
 
 def build_dot(me_name, friends, owns, my_pid, recommended):
     q = lambda s: str(s).replace('"', "'")
-    lines = ["graph G {", "rankdir=LR;", 'node [fontname="Helvetica"];']
+    lines = [
+        "graph G {",
+        "rankdir=LR;",
+        'node [fontname="Arial", style="filled,rounded", penwidth=1.5];',
+        'edge [fontname="Arial", fontsize=8, color="#8E8E8E"];',
+    ]
+    
+    # รวบรวมรายชื่อคนในเครือข่าย
     people = {me_name}
     for e in friends:
         people.update([e["a"], e["b"]])
+        
+    # วาด Node คน (Instagram Profile Style)
     for p in people:
-        color = "#4F8BF9" if p == me_name else "#DDE6F5"
-        font = "white" if p == me_name else "black"
-        lines.append(f'"{q(p)}" [shape=ellipse, style=filled, fillcolor="{color}", fontcolor="{font}"];')
+        if p == me_name:
+            # ผู้ใช้หลัก: สีชมพู Magenta เอกลักษณ์ของ Instagram
+            fill = "#E1306C"
+            font = "#FFFFFF"
+            color = "#C13584"
+        else:
+            # เพื่อน: สีม่วงอ่อน พาสเทล
+            fill = "#F0E6FF"
+            font = "#262626"
+            color = "#D1B3FF"
+            
+        lines.append(
+            f'"{q(p)}" [shape=ellipse, fillcolor="{fill}", fontcolor="{font}", color="{color}"];'
+        )
+        
+    # วาด Relationship เส้นเพื่อน (FRIEND_OF)
     for e in friends:
-        lines.append(f'"{q(e["a"])}" -- "{q(e["b"])}" [label="FRIEND_OF", fontsize=9];')
+        lines.append(
+            f'"{q(e["a"])}" -- "{q(e["b"])}" [label="FRIEND_OF", color="#C13584", penwidth=1.2];'
+        )
+        
+    # วาด Node รถและ Relationship เจ้าของ (OWNS)
     for o in owns:
         car = q(o["car"])
         mine = o["pid"] == my_pid
         hit = o["car"] in recommended and not mine
-        fill = "#FFD966" if hit else ("#B7E1CD" if mine else "#F3F3F3")
-        lines.append(f'"car:{car}" [label="{car}", shape=box, style="rounded,filled", fillcolor="{fill}"];')
-        lines.append(f'"{q(o["person"])}" -- "car:{car}" [label="OWNS", fontsize=9, style=dashed];')
+        
+        if hit:
+            # รถที่แนะนำ: สีส้ม Instagram Pop
+            fill = "#F77737"
+            font = "#FFFFFF"
+            color = "#FCAF45"
+        elif mine:
+            # รถตนเอง: สีชมพูพาสเทล
+            fill = "#FFD1DC"
+            font = "#262626"
+            color = "#E1306C"
+        else:
+            # รถทั่วไป: สีเทาพาสเทลสะอาดตา
+            fill = "#F3F4F6"
+            font = "#555555"
+            color = "#E5E7EB"
+            
+        lines.append(
+            f'"car:{car}" [label="{car}", shape=box, fillcolor="{fill}", fontcolor="{font}", color="{color}"];'
+        )
+        lines.append(
+            f'"{q(o["person"])}" -- "car:{car}" [label="OWNS", style=dashed, color="#8E8E8E"];'
+        )
+        
     lines.append("}")
     return "\n".join(lines)
 
@@ -310,7 +357,7 @@ with tab_graph:
     friends, owns = network(pid, hops)
     rec_names = set(df["car"]) if not df.empty else set()
     st.graphviz_chart(build_dot(names[pid], friends, owns, pid, rec_names), use_container_width=True)
-    st.caption("ฟ้า = ผู้ใช้ · เหลือง = รถที่แนะนำ · เขียว = รถของผู้ใช้เอง")
+    st.caption("💖 ชมพูเข้ม = ผู้ใช้ปัจจุบัน · 🟧 ส้ม = รถที่แนะนำ · 🌸 ชมพูอ่อน = รถของผู้ใช้ · 🟣 ม่วงอ่อน = เพื่อน")
 
 with tab_stats:
     s1, s2 = st.columns(2)
