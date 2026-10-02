@@ -2,7 +2,7 @@ import os
 import re
 from urllib.parse import quote
 
-import pandas as pd
+
 import requests
 import streamlit as st
 from neo4j import GraphDatabase
